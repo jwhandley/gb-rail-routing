@@ -4,7 +4,6 @@ use std::{
     path::Path,
 };
 
-use anyhow::Context;
 use chrono::{NaiveDate, NaiveTime};
 
 use crate::timetable::{

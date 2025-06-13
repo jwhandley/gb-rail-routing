@@ -17,13 +17,12 @@ fn main() -> anyhow::Result<()> {
     let footpaths = read_alf("../timetable/RJTTF491.ALF")?;
 
     let origin = StopId::new("GUILDFD");
-
     let connection_scanner = ConnectionScan::new(trips, stops, footpaths);
 
     let today = NaiveDate::from_ymd_opt(2025, 6, 11).unwrap();
     let time = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
     let start_time = NaiveDateTime::new(today, time);
-    let end_time = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+    let end_time = NaiveTime::from_hms_opt(8, 45, 0).unwrap();
 
     println!("Scanning from: {:?}", &origin);
 

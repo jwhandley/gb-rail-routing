@@ -7,6 +7,7 @@ impl StopId {
     }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Stop {
     pub tiploc: StopId,

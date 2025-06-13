@@ -57,6 +57,7 @@ impl Calendar {
     }
 }
 
+#[derive(Debug)]
 struct Transfer {
     from_stop: StopId,
     to_stop: StopId,
@@ -109,21 +110,18 @@ impl ConnectionScan {
 
         let transfers = pathways
             .iter()
-            .map(|p| {
-                let from_stop = stop_map
-                    .get(&p.from_crs)
-                    .map(|s| s.tiploc.clone())
-                    .unwrap_or(StopId::new(&p.from_crs));
+            .filter_map(|p| {
+                let from_stop = stop_map.get(&p.from_crs).map(|s| s.tiploc.clone());
 
-                let to_stop = stop_map
-                    .get(&p.to_crs)
-                    .map(|s| s.tiploc.clone())
-                    .unwrap_or(StopId::new(&p.to_crs));
+                let to_stop = stop_map.get(&p.to_crs).map(|s| s.tiploc.clone());
 
-                Transfer {
-                    from_stop,
-                    to_stop,
-                    min_transfer_time: p.time,
+                match (from_stop, to_stop) {
+                    (Some(from_stop), Some(to_stop)) => Some(Transfer {
+                        from_stop,
+                        to_stop,
+                        min_transfer_time: p.time,
+                    }),
+                    _ => None,
                 }
             })
             .into_group_map_by(|t| t.from_stop.clone());
@@ -154,7 +152,7 @@ impl ConnectionScan {
         let mut trips_set = HashSet::new();
         let mut arrival_times: HashMap<StopId, u32> = HashMap::new();
 
-        arrival_times.insert(origin, time.num_seconds_from_midnight());
+        arrival_times.insert(origin.clone(), time.num_seconds_from_midnight());
 
         let start_idx = self
             .connections
@@ -169,12 +167,18 @@ impl ConnectionScan {
             let min_change_time = self
                 .stops
                 .get(&c.from_stop)
-                .map(|s| s.min_change_time)
+                .map(|s| {
+                    if s.tiploc == origin {
+                        0
+                    } else {
+                        s.min_change_time * 60
+                    }
+                })
                 .unwrap_or(0);
 
             let from_stop_arrival = arrival_times.get(&c.from_stop).copied().unwrap_or(u32::MAX);
             let already_boarded = trips_set.contains(&c.trip_id);
-            let can_board = from_stop_arrival + min_change_time <= c.departure_time;
+            let can_board = from_stop_arrival <= c.departure_time - min_change_time;
 
             if can_board || already_boarded {
                 trips_set.insert(c.trip_id.clone());
@@ -183,17 +187,17 @@ impl ConnectionScan {
 
                 if c.arrival_time < to_stop_arrival {
                     arrival_times.insert(c.to_stop.clone(), c.arrival_time);
-                }
 
-                for transfer in self.get_transfers(&c.to_stop) {
-                    let new_time = c.arrival_time + transfer.min_transfer_time;
-                    let current_time = arrival_times
-                        .get(&transfer.to_stop)
-                        .copied()
-                        .unwrap_or(u32::MAX);
+                    for transfer in self.get_transfers(&c.to_stop) {
+                        let new_time: u32 = c.arrival_time + transfer.min_transfer_time;
+                        let current_time = arrival_times
+                            .get(&transfer.to_stop)
+                            .copied()
+                            .unwrap_or(u32::MAX);
 
-                    if new_time < current_time {
-                        arrival_times.insert(transfer.to_stop.clone(), new_time);
+                        if new_time < current_time {
+                            arrival_times.insert(transfer.to_stop.clone(), new_time);
+                        }
                     }
                 }
             }

@@ -10,6 +10,7 @@ enum Mode {
     Transfer,
 }
 
+#[allow(unused)]
 pub struct Footpath {
     pub from_crs: String,
     pub to_crs: String,
@@ -52,7 +53,7 @@ impl Footpath {
             from_crs,
             to_crs,
             mode,
-            time: t,
+            time: t * 60,
         })
         .context("Failed to parse time")
     }
