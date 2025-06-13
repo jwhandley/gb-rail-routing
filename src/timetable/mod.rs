@@ -40,11 +40,11 @@ pub struct Timetable {
 
 impl Timetable {
     pub fn read<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let msn_path = find_first_file_with_extension(&path, ".msn")
+        let msn_path = find_first_file_with_extension(&path, "msn")
             .context("Timetable must have .MSN file")?;
-        let mca_path = find_first_file_with_extension(&path, ".mca")
+        let mca_path = find_first_file_with_extension(&path, "mca")
             .context("Timetable must have .MCA file")?;
-        let alf_path = find_first_file_with_extension(&path, ".alf")
+        let alf_path = find_first_file_with_extension(&path, "alf")
             .context("Timetable must have .ALF file")?;
 
         let stops = read_msn(msn_path)?;
