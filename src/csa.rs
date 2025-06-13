@@ -2,18 +2,23 @@ use crate::timetable::{
     stop::StopId,
     trip::{Trip, TripId, TripType},
 };
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use std::collections::HashMap;
+use chrono::{NaiveDate, NaiveDateTime, Timelike};
+use itertools::Itertools;
+use std::{
+    collections::{HashMap, HashSet},
+    u32,
+};
 
+#[derive(Debug)]
 struct Connection {
     trip_id: TripId,
     from_stop: StopId,
     to_stop: StopId,
-    departure_time: NaiveTime,
-    arrival_time: NaiveTime,
+    departure_time: u32,
+    arrival_time: u32,
 }
 
-pub struct Calendar {
+struct Calendar {
     trips: HashMap<TripId, Vec<Trip>>,
 }
 
@@ -37,12 +42,12 @@ impl Calendar {
         Self { trips: lookup }
     }
 
-    fn runs_on(&self, trip_id: TripId, date: NaiveDate) -> bool {
-        let t = &self.trips[&trip_id];
+    fn runs_on(&self, trip_id: &TripId, date: NaiveDate) -> bool {
+        let t = &self.trips[trip_id];
         if t.len() == 1 {
             t[0].runs_on(date)
         } else {
-            assert_ne!(t[0].trip_type, TripType::Permanent);
+            // assert_eq!(t[0].trip_type, TripType::Permanent);
             match t[1].trip_type {
                 TripType::Cancellation => false,
                 _ => t[1].runs_on(date),
@@ -60,23 +65,29 @@ impl ConnectionScan {
     pub fn new(trips: Vec<Trip>) -> Self {
         let mut connections = vec![];
         for trip in trips.iter() {
-            for pair in trip.locations.chunks(2) {
-                let departure_time = pair[0]
+            for (from, to) in trip.locations.iter().tuple_windows() {
+                let departure_time = from
                     .departure_time()
                     .expect("Should only be an origin or intermediate stop");
 
-                let from_stop = pair[0].id();
-                let to_stop = pair[1].id();
-                let arrival_time = pair[1]
+                let from_stop = from.id();
+                let to_stop = to.id();
+                let arrival_time = to
                     .arrival_time()
                     .expect("Should only be an intermediate or destination stop");
+
+                let arrival_secs = if arrival_time < departure_time {
+                    arrival_time.num_seconds_from_midnight() + 24 * 3600
+                } else {
+                    arrival_time.num_seconds_from_midnight()
+                };
 
                 connections.push(Connection {
                     trip_id: trip.id.clone(),
                     from_stop,
                     to_stop,
-                    departure_time,
-                    arrival_time,
+                    departure_time: departure_time.num_seconds_from_midnight(),
+                    arrival_time: arrival_secs,
                 });
             }
         }
@@ -95,17 +106,38 @@ impl ConnectionScan {
         &self,
         origin: StopId,
         start_time: NaiveDateTime,
-    ) -> HashMap<StopId, NaiveTime> {
-        let mut arrival_times = HashMap::new();
-        arrival_times.insert(origin, start_time.time());
+    ) -> HashMap<StopId, u32> {
+        let time = start_time.time();
+        let date = start_time.date();
+
+        let mut trips_set = HashSet::new();
+        let mut arrival_times: HashMap<StopId, u32> = HashMap::new();
+
+        arrival_times.insert(origin, time.num_seconds_from_midnight());
 
         let start_idx = self
             .connections
-            .binary_search_by_key(&start_time.time(), |c| c.departure_time)
+            .binary_search_by_key(&time.num_seconds_from_midnight(), |c| c.departure_time)
             .unwrap_or_else(|i| i);
 
-        for connection in self.connections.iter().skip(start_idx) {
-            todo!()
+        for c in self.connections.iter().skip(start_idx - 1) {
+            if !self.calendar.runs_on(&c.trip_id, date) {
+                continue;
+            }
+
+            let from_stop_arrival = arrival_times.get(&c.from_stop).copied().unwrap_or(u32::MAX);
+            let already_boarded = trips_set.contains(&c.trip_id);
+            let can_board = from_stop_arrival <= c.departure_time;
+
+            if can_board || already_boarded {
+                trips_set.insert(c.trip_id.clone());
+
+                let to_stop_arrival = arrival_times.get(&c.to_stop).copied().unwrap_or(u32::MAX);
+
+                if c.arrival_time < to_stop_arrival {
+                    arrival_times.insert(c.to_stop.clone(), c.arrival_time);
+                }
+            }
         }
 
         arrival_times

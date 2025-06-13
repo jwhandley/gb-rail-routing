@@ -4,13 +4,30 @@ use std::{
     path::Path,
 };
 
+use anyhow::Context;
 use chrono::{NaiveDate, NaiveTime};
 
 use crate::timetable::{
+    footpath::Footpath,
     location::Location,
     stop::{Stop, StopId},
     trip::{Trip, TripId, TripType},
 };
+
+pub fn read_alf<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Footpath>> {
+    let f = File::open(path)?;
+    let rdr = BufReader::new(f);
+
+    let mut footpaths = vec![];
+    for l in rdr.lines() {
+        let line = l?;
+
+        let path = Footpath::parse(&line)?;
+        footpaths.push(path);
+    }
+
+    Ok(footpaths)
+}
 
 pub fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
     let f = File::open(path)?;
@@ -50,7 +67,7 @@ pub fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
                 trip_id, start_date, end_date, trip_type, days_run,
             ));
         } else if line.starts_with("LO") {
-            let tiploc = StopId::new(line[2..10].trim().to_owned());
+            let tiploc = StopId::new(line[2..10].trim());
             let departure_time = NaiveTime::parse_from_str(&line[10..14], "%H%M")?;
 
             let loc = Location::Origin {
@@ -62,9 +79,9 @@ pub fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
                 current_trip.add_location(loc);
             }
         } else if line.starts_with("LI") {
-            let tiploc = StopId::new(line[2..10].trim().to_owned());
-            let departure_time = NaiveTime::parse_from_str(&line[16..19], "%H%M");
+            let tiploc = StopId::new(line[2..10].trim());
             let arrival_time = NaiveTime::parse_from_str(&line[10..14], "%H%M");
+            let departure_time = NaiveTime::parse_from_str(&line[15..19], "%H%M");
 
             if let (Ok(departure_time), Ok(arrival_time)) = (departure_time, arrival_time) {
                 let loc = Location::Intermediate {
@@ -78,7 +95,7 @@ pub fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
                 }
             }
         } else if line.starts_with("LT") {
-            let tiploc = StopId::new(line[2..10].trim().to_owned());
+            let tiploc = StopId::new(line[2..10].trim());
             let arrival_time = NaiveTime::parse_from_str(&line[10..14], "%H%M")?;
 
             let loc = Location::Destination {
@@ -120,7 +137,7 @@ pub fn read_msn<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Stop>> {
         }
 
         let name = line[5..31].trim().to_owned();
-        let tiploc = StopId::new(line[36..43].trim().to_owned());
+        let tiploc = StopId::new(line[36..43].trim());
         let crs = line[49..52].to_owned();
 
         let min_change_time = line[64..65].parse::<u32>()?;

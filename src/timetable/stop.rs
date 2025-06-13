@@ -2,8 +2,8 @@
 pub struct StopId(String);
 
 impl StopId {
-    pub fn new(str: String) -> Self {
-        Self(str)
+    pub fn new(str: &str) -> Self {
+        Self(str.to_owned())
     }
 }
 
