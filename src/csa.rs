@@ -1,5 +1,6 @@
 use crate::timetable::{
-    stop::StopId,
+    footpath::Footpath,
+    stop::{Stop, StopId},
     trip::{Trip, TripId, TripType},
 };
 use chrono::{NaiveDate, NaiveDateTime, Timelike};
@@ -56,13 +57,21 @@ impl Calendar {
     }
 }
 
+struct Transfer {
+    from_stop: StopId,
+    to_stop: StopId,
+    min_transfer_time: u32,
+}
+
 pub struct ConnectionScan {
+    stops: HashMap<StopId, Stop>,
+    transfers: HashMap<StopId, Vec<Transfer>>,
     connections: Vec<Connection>,
     calendar: Calendar,
 }
 
 impl ConnectionScan {
-    pub fn new(trips: Vec<Trip>) -> Self {
+    pub fn new(trips: Vec<Trip>, stops: Vec<Stop>, pathways: Vec<Footpath>) -> Self {
         let mut connections = vec![];
         for trip in trips.iter() {
             for (from, to) in trip.locations.iter().tuple_windows() {
@@ -96,9 +105,41 @@ impl ConnectionScan {
 
         let calendar = Calendar::new(trips);
 
+        let stop_map: HashMap<String, &Stop> = stops.iter().map(|s| (s.crs.clone(), s)).collect();
+
+        let transfers = pathways
+            .iter()
+            .map(|p| {
+                let from_stop = stop_map
+                    .get(&p.from_crs)
+                    .map(|s| s.tiploc.clone())
+                    .unwrap_or(StopId::new(&p.from_crs));
+
+                let to_stop = stop_map
+                    .get(&p.to_crs)
+                    .map(|s| s.tiploc.clone())
+                    .unwrap_or(StopId::new(&p.to_crs));
+
+                Transfer {
+                    from_stop,
+                    to_stop,
+                    min_transfer_time: p.time,
+                }
+            })
+            .into_group_map_by(|t| t.from_stop.clone());
+
         Self {
+            stops: stops.into_iter().map(|s| (s.tiploc.clone(), s)).collect(),
+            transfers,
             connections,
             calendar,
+        }
+    }
+
+    fn get_transfers(&self, stop: &StopId) -> impl Iterator<Item = &Transfer> {
+        match self.transfers.get(stop) {
+            Some(transfers) => transfers.iter(),
+            None => [].iter(),
         }
     }
 
@@ -125,9 +166,15 @@ impl ConnectionScan {
                 continue;
             }
 
+            let min_change_time = self
+                .stops
+                .get(&c.from_stop)
+                .map(|s| s.min_change_time)
+                .unwrap_or(0);
+
             let from_stop_arrival = arrival_times.get(&c.from_stop).copied().unwrap_or(u32::MAX);
             let already_boarded = trips_set.contains(&c.trip_id);
-            let can_board = from_stop_arrival <= c.departure_time;
+            let can_board = from_stop_arrival + min_change_time <= c.departure_time;
 
             if can_board || already_boarded {
                 trips_set.insert(c.trip_id.clone());
@@ -136,6 +183,18 @@ impl ConnectionScan {
 
                 if c.arrival_time < to_stop_arrival {
                     arrival_times.insert(c.to_stop.clone(), c.arrival_time);
+                }
+
+                for transfer in self.get_transfers(&c.to_stop) {
+                    let new_time = c.arrival_time + transfer.min_transfer_time;
+                    let current_time = arrival_times
+                        .get(&transfer.to_stop)
+                        .copied()
+                        .unwrap_or(u32::MAX);
+
+                    if new_time < current_time {
+                        arrival_times.insert(transfer.to_stop.clone(), new_time);
+                    }
                 }
             }
         }

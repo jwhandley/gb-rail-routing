@@ -11,10 +11,10 @@ enum Mode {
 }
 
 pub struct Footpath {
-    from_crs: String,
-    to_crs: String,
+    pub from_crs: String,
+    pub to_crs: String,
     mode: Mode,
-    time: u32,
+    pub time: u32,
 }
 
 impl Footpath {
