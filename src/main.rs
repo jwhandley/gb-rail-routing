@@ -3,21 +3,17 @@ use itertools::Itertools;
 
 use crate::{
     csa::ConnectionScan,
-    timetable::{
-        io::{read_alf, read_mca, read_msn},
-        stop::StopId,
-    },
+    timetable::{stop::StopId, Timetable},
 };
 mod csa;
 mod timetable;
 
 fn main() -> anyhow::Result<()> {
-    let stops = read_msn("../timetable/RJTTF491.MSN")?;
-    let trips = read_mca("../timetable/RJTTF491.MCA")?;
-    let footpaths = read_alf("../timetable/RJTTF491.ALF")?;
+    let timetable = Timetable::read("../timetable")?;
 
-    let origin = StopId::new("GUILDFD");
-    let connection_scanner = ConnectionScan::new(trips, stops, footpaths);
+    let origin = StopId::new("MNCRPIC");
+    let connection_scanner =
+        ConnectionScan::new(timetable.trips, timetable.stops, timetable.footpaths);
 
     let today = NaiveDate::from_ymd_opt(2025, 6, 11).unwrap();
     let time = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
