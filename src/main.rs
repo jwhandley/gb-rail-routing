@@ -1,4 +1,5 @@
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike};
+use clap::Parser;
 use itertools::Itertools;
 
 use crate::{
@@ -8,30 +9,49 @@ use crate::{
 mod csa;
 mod timetable;
 
-fn main() -> anyhow::Result<()> {
-    let timetable = Timetable::read("../timetable")?;
+#[derive(Parser)]
+struct Args {
+    /// TIPLOC of origin station
+    origin: String,
+    /// Path to timetable file
+    timetable_path: String,
+    /// Departure date
+    date: NaiveDate,
+    /// Departure time
+    time: NaiveTime,
+    /// Max trip duration
+    max_duration: i64,
+}
 
-    let origin = StopId::new("MNCRPIC");
+fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
+    let timetable = Timetable::read(&args.timetable_path)?;
+
+    let origin = StopId::new(&args.origin);
     let connection_scanner =
         ConnectionScan::new(timetable.trips, timetable.stops, timetable.footpaths);
 
-    let today = NaiveDate::from_ymd_opt(2025, 6, 11).unwrap();
-    let time = NaiveTime::from_hms_opt(8, 0, 0).unwrap();
-    let start_time = NaiveDateTime::new(today, time);
-    let end_time = NaiveTime::from_hms_opt(8, 45, 0).unwrap();
+    let date = args.date;
+    let start_time = args.time;
+    let end_time = start_time + TimeDelta::minutes(args.max_duration);
 
-    println!("Scanning from: {:?}", &origin);
+    println!(
+        "Finding stops accessible from {:?} starting at {start_time} arriving by {end_time}",
+        &origin
+    );
 
-    let arrival_times = connection_scanner.departure_isochrone(origin, start_time);
+    let arrival_times =
+        connection_scanner.departure_isochrone(origin, NaiveDateTime::new(date, start_time));
 
     arrival_times
         .into_iter()
         .filter(|(_, time)| *time < end_time.num_seconds_from_midnight())
         .sorted_by_key(|(_, time)| *time)
-        .for_each(|(tiploc, time)| {
+        .for_each(|(tiploc, t)| {
             println!(
-                "{tiploc:?}: {}",
-                NaiveTime::from_num_seconds_from_midnight_opt(time, 0).unwrap()
+                "Can reach {tiploc:?} at {:?}",
+                NaiveTime::from_num_seconds_from_midnight_opt(t, 0).unwrap()
             );
         });
 

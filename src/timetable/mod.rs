@@ -142,8 +142,8 @@ fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
                 trip_id, start_date, end_date, trip_type, days_run,
             ));
         } else if line.starts_with("LO") {
-            let tiploc = StopId::new(line[2..10].trim());
-            let departure_time = NaiveTime::parse_from_str(&line[10..14], "%H%M")?;
+            let tiploc = StopId::new(line[2..9].trim());
+            let departure_time = NaiveTime::parse_from_str(&line[15..19], "%H%M")?;
 
             let loc = Location::Origin {
                 tiploc,
@@ -154,24 +154,41 @@ fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
                 current_trip.add_location(loc);
             }
         } else if line.starts_with("LI") {
-            let tiploc = StopId::new(line[2..10].trim());
-            let arrival_time = NaiveTime::parse_from_str(&line[10..14], "%H%M");
-            let departure_time = NaiveTime::parse_from_str(&line[15..19], "%H%M");
+            let activities = &line[42..54];
+            if !(activities.contains("T ")
+                || activities.contains("D ")
+                || activities.contains("U "))
+            {
+                continue;
+            }
 
-            if let (Ok(departure_time), Ok(arrival_time)) = (departure_time, arrival_time) {
-                let loc = Location::Intermediate {
-                    tiploc,
-                    arrival_time,
-                    departure_time,
-                };
+            let tiploc = StopId::new(line[2..9].trim());
 
-                if let Some(current_trip) = current_trip.as_mut() {
-                    current_trip.add_location(loc);
-                }
+            let mut arrival_time = NaiveTime::parse_from_str(&line[25..29], "%H%M")?;
+            let mut departure_time = NaiveTime::parse_from_str(&line[29..33], "%H%M")?;
+
+            // If no public time, use scheduled one
+            if &line[25..29] == "0000" {
+                arrival_time = NaiveTime::parse_from_str(&line[10..14], "%H%M")?;
+            }
+
+            // If no public time, use scheduled one
+            if &line[29..33] == "0000" {
+                departure_time = NaiveTime::parse_from_str(&line[15..19], "%H%M")?;
+            }
+
+            let loc = Location::Intermediate {
+                tiploc,
+                arrival_time,
+                departure_time,
+            };
+
+            if let Some(current_trip) = current_trip.as_mut() {
+                current_trip.add_location(loc);
             }
         } else if line.starts_with("LT") {
-            let tiploc = StopId::new(line[2..10].trim());
-            let arrival_time = NaiveTime::parse_from_str(&line[10..14], "%H%M")?;
+            let tiploc = StopId::new(line[2..9].trim());
+            let arrival_time = NaiveTime::parse_from_str(&line[15..19], "%H%M")?;
 
             let loc = Location::Destination {
                 tiploc,
