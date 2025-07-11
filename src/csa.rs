@@ -5,10 +5,7 @@ use crate::timetable::{
 };
 use chrono::{NaiveDate, NaiveDateTime, Timelike};
 use itertools::Itertools;
-use std::{
-    collections::{HashMap, HashSet},
-    u32,
-};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 struct Connection {

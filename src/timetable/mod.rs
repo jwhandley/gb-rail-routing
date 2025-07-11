@@ -28,7 +28,7 @@ fn find_first_file_with_extension<P: AsRef<Path>>(dir: P, extension: &str) -> Op
             path.is_file()
                 && path
                     .extension()
-                    .map_or(false, |ext| ext.to_ascii_lowercase() == extension)
+                    .is_some_and(|ext| ext.to_ascii_lowercase() == extension)
         })
 }
 
@@ -128,7 +128,7 @@ fn read_mca<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Trip>> {
                 Some('O') => TripType::Overlay,
                 Some('N') => TripType::New,
                 Some('C') => TripType::Cancellation,
-                _ => panic!("Unexpected character at end of line: {}", line),
+                _ => panic!("Unexpected character at end of line: {line}"),
             };
 
             let mut days_run = [false; 7];
