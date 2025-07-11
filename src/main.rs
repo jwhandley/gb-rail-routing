@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike};
 use clap::Parser;
 use itertools::Itertools;
@@ -26,7 +28,9 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    let now = Instant::now();
     let timetable = Timetable::read(&args.timetable_path)?;
+    println!("Read timetable in {:?}", now.elapsed());
 
     let origin = StopId::new(&args.origin);
     let connection_scanner =
@@ -41,8 +45,10 @@ fn main() -> anyhow::Result<()> {
         &origin
     );
 
+    let now = Instant::now();
     let arrival_times =
         connection_scanner.departure_isochrone(origin, NaiveDateTime::new(date, start_time));
+    println!("Found stops in {:?}", now.elapsed());
 
     arrival_times
         .into_iter()
