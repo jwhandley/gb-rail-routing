@@ -1,4 +1,6 @@
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+use serde::Serialize;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct StopId(String);
 
 impl StopId {

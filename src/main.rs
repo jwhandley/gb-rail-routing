@@ -1,8 +1,9 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike};
-use clap::Parser;
-use itertools::Itertools;
+use actix_web::{post, web, App, HttpServer, Responder};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+
+use serde::Deserialize;
 
 use crate::{
     csa::ConnectionScan,
@@ -11,55 +12,50 @@ use crate::{
 mod csa;
 mod timetable;
 
-#[derive(Parser)]
-struct Args {
+#[derive(Deserialize)]
+struct Params {
     /// TIPLOC of origin station
     origin: String,
-    /// Path to timetable file
-    timetable_path: String,
     /// Departure date
     date: NaiveDate,
     /// Departure time
     time: NaiveTime,
-    /// Max trip duration
-    max_duration: i64,
 }
 
-fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+#[post("/isochrone")]
+async fn isochrone(
+    params: web::Json<Params>,
+    csa: web::Data<Arc<ConnectionScan>>,
+) -> impl Responder {
+    let origin = StopId::new(&params.origin);
+    let date = params.date;
+    let start_time = params.time;
+
+    let arrival_times = csa.departure_isochrone(origin, NaiveDateTime::new(date, start_time));
+
+    web::Json(arrival_times)
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let timetable_path = std::env::args().nth(1).unwrap();
 
     let now = Instant::now();
-    let timetable = Timetable::read(&args.timetable_path)?;
+    let timetable = Timetable::read(&timetable_path).unwrap();
     println!("Read timetable in {:?}", now.elapsed());
 
-    let origin = StopId::new(&args.origin);
-    let connection_scanner =
-        ConnectionScan::new(timetable.trips, timetable.stops, timetable.footpaths);
+    let connection_scanner = Arc::new(ConnectionScan::new(
+        timetable.trips,
+        timetable.stops,
+        timetable.footpaths,
+    ));
 
-    let date = args.date;
-    let start_time = args.time;
-    let end_time = start_time + TimeDelta::minutes(args.max_duration);
-
-    println!(
-        "Finding stops accessible from {:?} starting at {start_time} arriving by {end_time}",
-        &origin
-    );
-
-    let now = Instant::now();
-    let arrival_times =
-        connection_scanner.departure_isochrone(origin, NaiveDateTime::new(date, start_time));
-    println!("Found stops in {:?}", now.elapsed());
-
-    arrival_times
-        .into_iter()
-        .filter(|(_, time)| *time < end_time.num_seconds_from_midnight())
-        .sorted_by_key(|(_, time)| *time)
-        .for_each(|(tiploc, t)| {
-            println!(
-                "Can reach {tiploc:?} at {:?}",
-                NaiveTime::from_num_seconds_from_midnight_opt(t, 0).unwrap()
-            );
-        });
-
-    Ok(())
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(connection_scanner.clone()))
+            .service(isochrone)
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
 }
