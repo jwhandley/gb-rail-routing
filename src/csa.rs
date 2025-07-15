@@ -3,8 +3,11 @@ use crate::timetable::{
     stop::{Stop, StopId},
     trip::{Trip, TripId, TripType},
 };
+use anyhow::{anyhow, Context};
 use chrono::{NaiveDate, NaiveDateTime, Timelike};
+use geo_types::Point;
 use itertools::Itertools;
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
@@ -43,13 +46,12 @@ impl Calendar {
     fn runs_on(&self, trip_id: &TripId, date: NaiveDate) -> bool {
         let t = &self.trips[trip_id];
         if t.len() == 1 {
-            t[0].runs_on(date)
-        } else {
-            // assert_eq!(t[0].trip_type, TripType::Permanent);
-            match t[1].trip_type {
-                TripType::Cancellation => false,
-                _ => t[1].runs_on(date),
-            }
+            return t[0].runs_on(date);
+        }
+
+        match t[1].trip_type {
+            TripType::Cancellation => false,
+            _ => t[1].runs_on(date),
         }
     }
 }
@@ -59,6 +61,15 @@ struct Transfer {
     from_stop: StopId,
     to_stop: StopId,
     min_transfer_time: u32,
+}
+
+#[derive(Serialize)]
+struct ArrivalTime {
+    id: StopId,
+    name: String,
+    #[serde(serialize_with = "geojson::ser::serialize_geometry")]
+    geometry: Point,
+    arrival_time: u32,
 }
 
 pub struct ConnectionScan {
@@ -142,7 +153,11 @@ impl ConnectionScan {
         &self,
         origin: StopId,
         start_time: NaiveDateTime,
-    ) -> HashMap<StopId, u32> {
+    ) -> anyhow::Result<String> {
+        if !self.stops.contains_key(&origin) {
+            return Err(anyhow!("Invalid stop id"));
+        }
+
         let time = start_time.time();
         let date = start_time.date();
 
@@ -200,6 +215,21 @@ impl ConnectionScan {
             }
         }
 
-        arrival_times
+        let times: Vec<ArrivalTime> = arrival_times
+            .into_iter()
+            .filter(|(id, _)| self.stops.contains_key(&id))
+            .map(|(id, arrival)| {
+                let stop = &self.stops[&id];
+
+                ArrivalTime {
+                    id: id.clone(),
+                    name: stop.name.clone(),
+                    geometry: stop.coord.unwrap_or_default(),
+                    arrival_time: arrival,
+                }
+            })
+            .collect();
+
+        geojson::ser::to_feature_collection_string(&times).context("Failed to serialize")
     }
 }

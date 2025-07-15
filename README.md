@@ -14,13 +14,18 @@ start location but I may also add routing from point A to point B later.
 
 ## Usage
 
-Currently, the program is just a simple CLI that loads a decompressed timetable
-and then executes a query from an origin stop at a given date and time and with
-a given maximum trip duration.
+Currently, the program is just a simple web API that loads a decompressed
+timetable and then exposes an endpoint that allows you to query which stops are
+accesible from an origin stop at a given date and time
+
+To start the server:
 
 ```
-cargo run -r -- <ORIGIN> <TIMETABLE_PATH> <DATE> <TIME> <MAX_DURATION>
+cargo run -r -- <TIMETABLE_PATH>
 ```
 
-It will then print the list of accessible stations and the arrival time to
-stdout.
+To execute a query (assuming the server is running locally):
+
+```
+curl "http://localhost:8080/isochrone?origin={stop_id}&date={yyyy-mm-dd}&time={hh:mm:ss}"
+```

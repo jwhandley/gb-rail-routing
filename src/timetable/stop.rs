@@ -1,3 +1,4 @@
+use geo_types::Point;
 use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
@@ -16,14 +17,22 @@ pub struct Stop {
     pub name: String,
     pub crs: String,
     pub min_change_time: u32,
+    pub coord: Option<Point>,
 }
 
 impl Stop {
-    pub fn new(tiploc: StopId, name: String, crs: String, min_change_time: u32) -> Self {
+    pub fn new(
+        tiploc: StopId,
+        name: String,
+        crs: String,
+        coord: Option<Point>,
+        min_change_time: u32,
+    ) -> Self {
         Self {
             tiploc,
             name,
             crs,
+            coord,
             min_change_time,
         }
     }

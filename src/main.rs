@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Instant};
 
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web::{error, get, web, App, HttpServer};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
 use serde::Deserialize;
@@ -26,14 +26,13 @@ struct Params {
 async fn isochrone(
     params: web::Query<Params>,
     csa: web::Data<Arc<ConnectionScan>>,
-) -> impl Responder {
+) -> actix_web::Result<String> {
     let origin = StopId::new(&params.origin);
     let date = params.date;
     let start_time = params.time;
 
-    let arrival_times = csa.departure_isochrone(origin, NaiveDateTime::new(date, start_time));
-
-    web::Json(arrival_times)
+    csa.departure_isochrone(origin, NaiveDateTime::new(date, start_time))
+        .map_err(|err| error::ErrorBadRequest(err))
 }
 
 #[actix_web::main]

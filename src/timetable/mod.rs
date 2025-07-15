@@ -4,6 +4,7 @@ pub mod stop;
 pub mod trip;
 
 use std::{
+    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -11,6 +12,7 @@ use std::{
 
 use anyhow::Context;
 use chrono::{NaiveDate, NaiveTime};
+use serde::Deserialize;
 
 use crate::timetable::{
     footpath::Footpath,
@@ -30,6 +32,14 @@ fn find_first_file_with_extension<P: AsRef<Path>>(dir: P, extension: &str) -> Op
                     .extension()
                     .is_some_and(|ext| ext.to_ascii_lowercase() == extension)
         })
+}
+
+#[derive(Deserialize, Debug)]
+struct Station {
+    #[serde(alias = "3alpha")]
+    crs: String,
+    latitude: f64,
+    longitude: f64,
 }
 
 pub struct Timetable {
@@ -59,7 +69,12 @@ impl Timetable {
     }
 }
 
-fn read_msn<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Stop>> {
+fn read_msn(path: impl AsRef<Path>) -> anyhow::Result<Vec<Stop>> {
+    let stations_str = include_str!("../../uk-train-stations.json");
+    let stations: Vec<Station> = serde_json::from_str(&stations_str)?;
+    let station_lookup: HashMap<String, Station> =
+        stations.into_iter().map(|s| (s.crs.clone(), s)).collect();
+
     let f = File::open(path)?;
     let rdr = BufReader::new(f);
 
@@ -83,7 +98,12 @@ fn read_msn<P: AsRef<Path>>(path: P) -> anyhow::Result<Vec<Stop>> {
 
         let min_change_time = line[64..65].parse::<u32>()?;
 
-        stops.push(Stop::new(tiploc, name, crs, min_change_time));
+        if let Some(station_data) = station_lookup.get(&crs) {
+            let point = geo_types::Point::new(station_data.longitude, station_data.latitude);
+            stops.push(Stop::new(tiploc, name, crs, Some(point), min_change_time));
+        } else {
+            stops.push(Stop::new(tiploc, name, crs, None, min_change_time));
+        }
     }
 
     Ok(stops)
