@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Instant};
 
-use actix_web::{post, web, App, HttpServer, Responder};
+use actix_web::{get, web, App, HttpServer, Responder};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
 use serde::Deserialize;
@@ -22,9 +22,9 @@ struct Params {
     time: NaiveTime,
 }
 
-#[post("/isochrone")]
+#[get("/isochrone")]
 async fn isochrone(
-    params: web::Json<Params>,
+    params: web::Query<Params>,
     csa: web::Data<Arc<ConnectionScan>>,
 ) -> impl Responder {
     let origin = StopId::new(&params.origin);
